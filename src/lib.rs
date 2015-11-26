@@ -5,69 +5,70 @@ use std::io::Read;
 use std::sync::Arc;
 use std::ops::Deref;
 use std::iter::Iterator;
+use std::hash::{Hash, Hasher};
 use std::collections::VecDeque;
-use tokenizer::{Tokens, Token};
+use tokenizer::Token;
 
 #[derive(Clone, Eq)]
-pub struct Ngram {
-    mem: Arc<Vec<Token>>,
+pub struct Ngram<T> {
+    mem: Arc<Vec<T>>,
     len: usize,
 }
 
-impl Ngram {
-    pub fn new(tokens: Vec<Token>) -> Ngram {
+impl<T> Ngram<T> {
+    pub fn new(tokens: Vec<T>) -> Ngram<T> {
         let len = tokens.len();
         Ngram { mem: Arc::new(tokens), len: len, }
     }
 
-    fn derive(&self) -> Ngram {
+    fn derive(&self) -> Ngram<T> {
         Ngram { mem: self.mem.clone(), len: self.len - 1, }
     }
 }
 
-impl std::hash::Hash for Ngram {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl<T> Hash for Ngram<T> where T: Hash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.deref().hash(state);
     }
 }
 
-impl cmp::PartialEq<Ngram> for Ngram {
-    fn eq(&self, other: &Ngram) -> bool {
+impl<T> cmp::PartialEq<Ngram<T>> for Ngram<T> where T: cmp::PartialEq<T> {
+    fn eq(&self, other: &Ngram<T>) -> bool {
         self.deref().eq(other.deref())
     }
 }
 
-impl fmt::Debug for Ngram {
+impl<T> fmt::Debug for Ngram<T> where T: fmt::Debug {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Ngram({:?})", self.deref())
     }
 }
 
-impl Deref for Ngram {
-    type Target = [Token];
+impl<T> Deref for Ngram<T> {
+    type Target = [T];
 
-    fn deref(&self) -> &[Token] {
+    fn deref(&self) -> &[T] {
         let len = self.len;
         &self.mem[.. len]
     }
 }
 
-pub trait Filter {
-    fn accept(&mut self, ngram: &Ngram) -> bool;
+pub trait Filter<T> {
+    fn accept(&mut self, ngram: &Ngram<Arc<T>>) -> bool;
 }
 
 #[derive(Debug)]
 pub struct AcceptEverything;
-impl Filter for AcceptEverything {
-    fn accept(&mut self, _ngram: &Ngram) -> bool { true }
+impl<T> Filter<T> for AcceptEverything {
+    fn accept(&mut self, _ngram: &Ngram<Arc<T>>) -> bool { true }
 }
 
-pub struct Ngrams<I, E, F> {
-    state: IterState,
+pub struct Ngrams<T, I, E, F> where I: Iterator<Item = Result<T, E>> {
+    state: IterState<T>,
     filter: F,
-    src: Tokens<I, E>,
+    src: I,
     max_ngram: usize,
-    window: VecDeque<Token>,
+    window: VecDeque<Arc<T>>,
 }
 
 #[derive(Clone, Copy)]
@@ -77,15 +78,14 @@ enum IterCont {
 }
 
 #[derive(Clone)]
-enum IterState {
+enum IterState<T> {
     Fill,
-    Permute { len: usize, cont: IterCont, gen_type: NgramGenType, },
+    Permute { len: usize, cont: IterCont, gen_type: NgramGenType<Arc<T>>, },
     Depleted,
 }
 
-impl<I, E, F> Ngrams<I, E, F> {
-    pub fn new(src: Tokens<I, E>, max_ngram: usize, filter: F) -> Ngrams<I, E, F>
-        where I: Iterator<Item = Result<char, E>>, F: Filter
+impl<T, I, E, F> Ngrams<T, I, E, F> where I: Iterator<Item = Result<T, E>> {
+    pub fn new(src: I, max_ngram: usize, filter: F) -> Ngrams<T, I, E, F> where F: Filter<T>
     {
         Ngrams {
             state: IterState::Fill,
@@ -98,26 +98,41 @@ impl<I, E, F> Ngrams<I, E, F> {
 }
 
 #[derive(Clone, Debug)]
-pub enum NgramGenType {
+pub enum NgramGenType<T> {
     Base,
-    Derived(Ngram),
+    Derived(Ngram<T>),
 }
 
 #[derive(Debug)]
-pub struct NgramGen {
-    pub ngram: Ngram,
-    pub gen_type: NgramGenType,
+pub struct NgramGen<T> {
+    pub ngram: Ngram<Arc<T>>,
+    pub gen_type: NgramGenType<Arc<T>>,
 }
 
-impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char, E>>, F: Filter {
-    type Item = Result<NgramGen, E>;
+pub trait Attrs {
+    fn require_flush(&self) -> bool;
+    fn should_be_skipped(&self) -> bool;
+}
 
-    fn next(&mut self) -> Option<Result<NgramGen, E>> {
+impl Attrs for Token {
+    fn require_flush(&self) -> bool {
+        if let &Token::Newline = self { true } else { false }
+    }
+
+    fn should_be_skipped(&self) -> bool {
+        if let &Token::Whitespaces(..) = self { true } else { false }
+    }
+}
+
+impl<T, I, E, F> Iterator for Ngrams<T, I, E, F> where I: Iterator<Item = Result<T, E>>, F: Filter<T>, T: Attrs {
+    type Item = Result<NgramGen<T>, E>;
+
+    fn next(&mut self) -> Option<Result<NgramGen<T>, E>> {
         loop {
-            enum Trans {
+            enum Trans<T> {
                 Keep,
-                NextState(IterState),
-                ValueReady(NgramGen, IterState),
+                NextState(IterState<T>),
+                ValueReady(NgramGen<T>, IterState<T>),
             }
 
             let trans = match &self.state {
@@ -126,12 +141,12 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
                 &IterState::Fill if self.window.len() >= self.max_ngram =>
                     Trans::NextState(IterState::Permute { len: self.window.len(), cont: IterCont::Continue, gen_type: NgramGenType::Base, }),
                 &IterState::Fill => match self.src.next() {
-                    Some(Ok(Token::Newline)) =>
+                    Some(Ok(ref token)) if token.require_flush() =>
                         Trans::NextState(IterState::Permute { len: self.window.len(), cont: IterCont::Continue, gen_type: NgramGenType::Base, }),
-                    Some(Ok(Token::Whitespaces(..))) =>
+                    Some(Ok(ref token)) if token.should_be_skipped() =>
                         Trans::Keep,
                     Some(Ok(token)) => {
-                        self.window.push_back(token);
+                        self.window.push_back(Arc::new(token));
                         Trans::Keep
                     },
                     Some(Err(e)) =>
@@ -182,6 +197,7 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use std::ops::Deref;
     use std::cmp::Ordering;
     use tokenizer::{Token, Tokens};
@@ -198,8 +214,8 @@ mod test {
             other => other,
         });
 
-        macro_rules! w { ($str:expr) => ({ Token::PlainWord($str.to_owned()) }) }
-        macro_rules! p { ($str:expr) => ({ Token::Punct($str.to_owned()) }) }
+        macro_rules! w { ($str:expr) => ({ Arc::new(Token::PlainWord($str.to_owned())) }) }
+        macro_rules! p { ($str:expr) => ({ Arc::new(Token::Punct($str.to_owned())) }) }
         macro_rules! n { ($($expr:expr),+) => ({ Ngram::new(vec![$($expr),+]) }) }
         let sample =
             vec![n!(w!("a")), n!(w!("and")), n!(w!("by")), n!(w!("can")), n!(w!("git")), n!(w!("i")), n!(w!("is")), n!(w!("reason")),
