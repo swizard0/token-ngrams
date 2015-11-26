@@ -180,3 +180,7 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
     }
 }
 
+#[cfg(test)]
+mod test {
+    
+}
