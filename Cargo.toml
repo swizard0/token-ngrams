@@ -1,7 +1,10 @@
 [package]
 name = "token-ngrams"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Alexey Voznyuk <me@swizard.info>"]
+
+[lib]
+name = "token_ngrams"
 
 [dependencies]
 tokenizer = { git = "https://bitbucket.org/swizard/tokenizer.git" }
