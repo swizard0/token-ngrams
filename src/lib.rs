@@ -84,7 +84,7 @@ enum IterState {
 }
 
 impl<I, E, F> Ngrams<I, E, F> {
-    pub fn new(src: Tokens<I, E>, max_ngram: usize, filter: F) -> Ngrams<I, E, F> 
+    pub fn new(src: Tokens<I, E>, max_ngram: usize, filter: F) -> Ngrams<I, E, F>
         where I: Iterator<Item = Result<char, E>>, F: Filter
     {
         Ngrams {
@@ -123,10 +123,10 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
             let trans = match &self.state {
                 &IterState::Depleted =>
                     return None,
-                &IterState::Fill if self.window.len() >= self.max_ngram => 
+                &IterState::Fill if self.window.len() >= self.max_ngram =>
                     Trans::NextState(IterState::Permute { len: self.window.len(), cont: IterCont::Continue, gen_type: NgramGenType::Base, }),
                 &IterState::Fill => match self.src.next() {
-                    Some(Ok(Token::Newline)) => 
+                    Some(Ok(Token::Newline)) =>
                         Trans::NextState(IterState::Permute { len: self.window.len(), cont: IterCont::Continue, gen_type: NgramGenType::Base, }),
                     Some(Ok(Token::Whitespaces(..))) =>
                         Trans::Keep,
@@ -134,14 +134,14 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
                         self.window.push_back(token);
                         Trans::Keep
                     },
-                    Some(Err(e)) => 
+                    Some(Err(e)) =>
                         return Some(Err(e)),
-                    None if self.window.is_empty() => 
+                    None if self.window.is_empty() =>
                         Trans::NextState(IterState::Depleted),
-                    None => 
+                    None =>
                         Trans::NextState(IterState::Permute { len: self.window.len(), cont: IterCont::Finished, gen_type: NgramGenType::Base, }),
                 },
-                &IterState::Permute { len: 0, cont: IterCont::Finished, .. } if self.window.is_empty() => 
+                &IterState::Permute { len: 0, cont: IterCont::Finished, .. } if self.window.is_empty() =>
                     Trans::NextState(IterState::Depleted),
                 &IterState::Permute { len: 0, cont: IterCont::Finished, .. } => {
                     self.window.pop_front();
@@ -156,7 +156,7 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
                         &NgramGenType::Base => Ngram::new(self.window.iter().take(ngram_len).cloned().collect()),
                         &NgramGenType::Derived(ref base) => base.derive(),
                     };
-                    let next_state = 
+                    let next_state =
                         IterState::Permute { len: ngram_len - 1, cont: cont_action, gen_type: NgramGenType::Derived(ngram.clone()), };
                     if self.filter.accept(&ngram) {
                         Trans::ValueReady(NgramGen { ngram: ngram, gen_type: gen_type_value.clone(), }, next_state)
@@ -167,7 +167,7 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
             };
 
             match trans {
-                Trans::Keep => 
+                Trans::Keep =>
                     (),
                 Trans::NextState(next_state) =>
                     self.state = next_state,
