@@ -39,7 +39,7 @@ impl cmp::PartialEq<Ngram> for Ngram {
 
 impl fmt::Debug for Ngram {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Ngram({:?})", &*self)
+        write!(f, "Ngram({:?})", self.deref())
     }
 }
 
@@ -182,5 +182,65 @@ impl<I, E, F> Iterator for Ngrams<I, E, F> where I: Iterator<Item = Result<char,
 
 #[cfg(test)]
 mod test {
-    
+    use std::ops::Deref;
+    use std::cmp::Ordering;
+    use tokenizer::{Token, Tokens};
+    use super::{Ngram, Ngrams, AcceptEverything};
+
+    #[test]
+    fn simple_ngramms() {
+        let string = "And by the way, is there a reason I can't simply git submodule rm whatever?";
+        let tokens = Tokens::<_, ()>::new(string.chars().flat_map(|c| c.to_lowercase().map(|lc| Ok(lc))));
+        let ngrams_iter = Ngrams::new(tokens, 3, AcceptEverything);
+        let mut ngrams: Vec<_> = ngrams_iter.map(|g| g.unwrap().ngram).collect();
+        ngrams.sort_by(|a, b| match a.len().cmp(&b.len()) {
+            Ordering::Equal => a.deref().cmp(b),
+            other => other,
+        });
+
+        macro_rules! w { ($str:expr) => ({ Token::PlainWord($str.to_owned()) }) }
+        macro_rules! p { ($str:expr) => ({ Token::Punct($str.to_owned()) }) }
+        macro_rules! n { ($($expr:expr),+) => ({ Ngram::new(vec![$($expr),+]) }) }
+        let sample =
+            vec![n!(w!("a")), n!(w!("and")), n!(w!("by")), n!(w!("can")), n!(w!("git")), n!(w!("i")), n!(w!("is")), n!(w!("reason")),
+                 n!(w!("rm")), n!(w!("simply")), n!(w!("submodule")), n!(w!("t")), n!(w!("the")), n!(w!("there")), n!(w!("way")),
+                 n!(w!("whatever")), n!(p!("'")), n!(p!(",")), n!(p!("?")),
+
+                 n!(w!("a"), w!("reason")),
+                 n!(w!("and"), w!("by")),
+                 n!(w!("by"), w!("the")),
+                 n!(w!("can"), p!("'")),
+                 n!(w!("git"), w!("submodule")),
+                 n!(w!("i"), w!("can")),
+                 n!(w!("is"), w!("there")),
+                 n!(w!("reason"), w!("i")),
+                 n!(w!("rm"), w!("whatever")),
+                 n!(w!("simply"), w!("git")),
+                 n!(w!("submodule"), w!("rm")),
+                 n!(w!("t"), w!("simply")),
+                 n!(w!("the"), w!("way")),
+                 n!(w!("there"), w!("a")),
+                 n!(w!("way"), p!(",")),
+                 n!(w!("whatever"), p!("?")),
+                 n!(p!("'"), w!("t")),
+                 n!(p!(","), w!("is")),
+                 n!(w!("a"), w!("reason"), w!("i")),
+                 n!(w!("and"), w!("by"), w!("the")),
+                 n!(w!("by"), w!("the"), w!("way")),
+                 n!(w!("can"), p!("'"), w!("t")),
+                 n!(w!("git"), w!("submodule"), w!("rm")),
+                 n!(w!("i"), w!("can"), p!("'")),
+                 n!(w!("is"), w!("there"), w!("a")),
+                 n!(w!("reason"), w!("i"), w!("can")),
+                 n!(w!("rm"), w!("whatever"), p!("?")),
+                 n!(w!("simply"), w!("git"), w!("submodule")),
+                 n!(w!("submodule"), w!("rm"), w!("whatever")),
+                 n!(w!("t"), w!("simply"), w!("git")),
+                 n!(w!("the"), w!("way"), p!(",")),
+                 n!(w!("there"), w!("a"), w!("reason")),
+                 n!(w!("way"), p!(","), w!("is")),
+                 n!(p!("'"), w!("t"), w!("simply")),
+                 n!(p!(","), w!("is"), w!("there"))];
+        assert_eq!(ngrams, sample);
+    }
 }
