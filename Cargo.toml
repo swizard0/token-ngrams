@@ -1,0 +1,7 @@
+[package]
+name = "token-ngrams"
+version = "0.1.0"
+authors = ["Alexey Voznyuk <me@swizard.info>"]
+
+[dependencies]
+tokenizer = { path = "tokenizer" }

@@ -1,0 +1,3 @@
+[submodule "tokenizer"]
+	path = tokenizer
+	url = https://bitbucket.org/swizard/tokenizer.git
