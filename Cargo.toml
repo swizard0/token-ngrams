@@ -4,4 +4,4 @@ version = "0.1.1"
 authors = ["Alexey Voznyuk <me@swizard.info>"]
 
 [dependencies]
-tokenizer = { path = "https://bitbucket.org/swizard/tokenizer.git" }
+tokenizer = { git = "https://bitbucket.org/swizard/tokenizer.git" }
