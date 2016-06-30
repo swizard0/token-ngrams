@@ -1,7 +1,6 @@
 extern crate tokenizer;
 
 use std::{fmt, cmp};
-use std::io::Read;
 use std::sync::Arc;
 use std::ops::Deref;
 use std::iter::Iterator;
